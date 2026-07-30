@@ -69,9 +69,10 @@ async def auto_match_simulation(request: AutoMatchRequest, background_tasks: Bac
             request.tag_line = parts[1]
             
         user_player_id = f"{request.game_name}#{request.tag_line}"
-        
-        real_kda = 1.65
-        real_acs = 255
+
+        # Generate realistic fallback stats based on selected MMR
+        real_kda = round(random.uniform(1.0, 1.8) + (request.user_mmr / 5000), 2)
+        real_acs = random.randint(190, 270) + int(request.user_mmr / 100)
         stats_source = "simulated"
 
         # Attempt to fetch REAL telemetry from Riot Games API if key is present
