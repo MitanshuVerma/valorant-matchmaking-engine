@@ -63,6 +63,11 @@ async def join_queue(request: QueueJoinRequest):
 async def auto_match_simulation(request: AutoMatchRequest, background_tasks: BackgroundTasks):
     """Fetches REAL telemetry from Riot API if key is set, then populates 9 AI players after 7-15s delay."""
     try:
+        if "#" in request.game_name:
+            parts = request.game_name.split("#", 1)
+            request.game_name = parts[0]
+            request.tag_line = parts[1]
+            
         user_player_id = f"{request.game_name}#{request.tag_line}"
         
         real_kda = 1.65
