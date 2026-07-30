@@ -85,6 +85,9 @@ async def auto_match_simulation(request: AutoMatchRequest, background_tasks: Bac
                     stats_source = "Riot API (Live)"
                     logger.info(f"Successfully fetched live Riot API KDA: {real_kda}")
             except Exception as riot_err:
+                if "404" in str(riot_err):
+                    logger.error(f"Riot API returned 404: {user_player_id} does not exist.")
+                    raise HTTPException(status_code=404, detail=f"Invalid Riot ID! {user_player_id} does not exist on Riot Servers.")
                 logger.warning(f"Could not fetch from Riot API ({riot_err}). Falling back to simulation.")
 
         user_payload = {

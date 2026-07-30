@@ -98,8 +98,8 @@ matchForm.addEventListener('submit', async (e) => {
             startQueueTimer();
         } else {
             logToConsole(`Error: ${data.detail}`);
-            btnFindMatch.disabled = false;
-            btnFindMatch.style.opacity = '1';
+            alert(`Error: ${data.detail}`);
+            resetState();
         }
     } catch (err) {
         logToConsole(`Network Error: ${err.message}`);
