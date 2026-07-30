@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VALORANT // Matchmaking Engine & Live Telemetry</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Teko:wght@500;600;700&family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=4">
+</head>
+<body>
+    <div class="background-effects">
+        <div class="grid-overlay"></div>
+        <div class="red-glow-left"></div>
+        <div class="red-glow-right"></div>
+    </div>
+
+    <!-- Header Navbar -->
+    <header class="navbar">
+        <div class="nav-brand">
+            <div class="vct-logo">V</div>
+            <div class="brand-text">
+                <span class="title">VALORANT // PROTOCOL</span>
+                <span class="subtitle">TACTICAL 5V5 MATCHMAKING ENGINE v2.0</span>
+            </div>
+        </div>
+        <div class="nav-status">
+            <span class="status-dot"></span>
+            <span class="status-text">26 AGENTS ACTIVE // REDIS ZSET QUEUE</span>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Input & Control Panel -->
+        <section class="control-card">
+            <div class="card-header">
+                <h2>AGENT REGISTRATION</h2>
+                <p>Select your Agent and enter Riot ID to auto-populate a 5v5 Tactical Match</p>
+            </div>
+            
+            <form id="match-form" class="form-grid">
+                <div class="input-group">
+                    <label for="game_name">GAME NAME</label>
+                    <input type="text" id="game_name" placeholder="TenZ" value="TenZ" required>
+                </div>
+                <div class="input-group">
+                    <label for="tag_line">TAG LINE</label>
+                    <input type="text" id="tag_line" placeholder="SEN" value="SEN" required>
+                </div>
+                <div class="input-group">
+                    <label for="agent_select">SELECT AGENT (ALL 26 AGENTS)</label>
+                    <select id="agent_select">
+                        <optgroup label="Duelists">
+                            <option value="Jett" selected>Jett (Duelist)</option>
+                            <option value="Reyna">Reyna (Duelist)</option>
+                            <option value="Raze">Raze (Duelist)</option>
+                            <option value="Phoenix">Phoenix (Duelist)</option>
+                            <option value="Yoru">Yoru (Duelist)</option>
+                            <option value="Neon">Neon (Duelist)</option>
+                            <option value="Iso">Iso (Duelist)</option>
+                        </optgroup>
+                        <optgroup label="Initiators">
+                            <option value="Sova">Sova (Initiator)</option>
+                            <option value="Breach">Breach (Initiator)</option>
+                            <option value="Skye">Skye (Initiator)</option>
+                            <option value="KAY/O">KAY/O (Initiator)</option>
+                            <option value="Fade">Fade (Initiator)</option>
+                            <option value="Gekko">Gekko (Initiator)</option>
+                            <option value="Tejo">Tejo (Initiator)</option>
+                        </optgroup>
+                        <optgroup label="Controllers">
+                            <option value="Omen">Omen (Controller)</option>
+                            <option value="Brimstone">Brimstone (Controller)</option>
+                            <option value="Viper">Viper (Controller)</option>
+                            <option value="Astra">Astra (Controller)</option>
+                            <option value="Harbor">Harbor (Controller)</option>
+                            <option value="Clove">Clove (Controller)</option>
+                        </optgroup>
+                        <optgroup label="Sentinels">
+                            <option value="Sage">Sage (Sentinel)</option>
+                            <option value="Cypher">Cypher (Sentinel)</option>
+                            <option value="Killjoy">Killjoy (Sentinel)</option>
+                            <option value="Chamber">Chamber (Sentinel)</option>
+                            <option value="Deadlock">Deadlock (Sentinel)</option>
+                            <option value="Vyse">Vyse (Sentinel)</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="user_mmr">INITIAL MMR</label>
+                    <input type="number" id="user_mmr" value="2150" step="any">
+                </div>
+
+                <div class="button-group">
+                    <button type="submit" id="btn-find-match" class="btn-primary">
+                        <span class="btn-icon">⚡</span>
+                        <span class="btn-text">FIND 5V5 MATCH</span>
+                    </button>
+                    <button type="button" id="btn-reset-queue" class="btn-secondary">
+                        LEAVE QUEUE
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Dynamic 5v5 Matchmaking Dashboard Grid -->
+        <section class="roster-card">
+            <div class="roster-header">
+                <h3>5V5 TACTICAL QUEUE LAYOUT (<span id="roster-count">0</span> / 10 AGENTS)</h3>
+                <span class="roster-sub">ZSET Sorted by MMR // Attackers vs Defenders Split</span>
+            </div>
+
+            <div id="roster-container">
+                <div class="empty-state">
+                    <div class="radar-ping"></div>
+                    <p>No agents in queue. Click <strong>FIND 5V5 MATCH</strong> to generate 10 agents across Attackers and Defenders!</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Queue HUD & Engine Logs -->
+        <div class="hud-grid" style="margin-top: 1.5rem;">
+            <div class="hud-card-row">
+                <div class="hud-box">
+                    <span class="hud-title">QUEUE TIMER</span>
+                    <div id="queue-timer" class="hud-timer">00:00</div>
+                </div>
+
+                <div class="hud-box">
+                    <span class="hud-title">MMR TOLERANCE EXPANSION</span>
+                    <div id="mmr-expansion" class="hud-value">±150 MMR</div>
+                    <div class="progress-bar">
+                        <div id="expansion-progress" class="progress-fill"></div>
+                    </div>
+                </div>
+
+                <div class="hud-box full-width">
+                    <span class="hud-title">REDIS ENGINE & ALGORITHM LOGS</span>
+                    <div id="engine-logs" class="logs-console">
+                        <div class="log-line">[SYSTEM] 5v5 Engine active. All 26 VALORANT agents registered.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- MATCH FOUND OVERLAY MODAL -->
+    <div id="match-modal" class="modal-overlay hidden">
+        <div class="modal-container">
+            <div class="match-found-header">
+                <div class="vct-badge">VCT PROTOCOL</div>
+                <h1>MATCH FOUND</h1>
+                <div class="map-badge">MAP: <span id="modal-map-name">HAVEN</span></div>
+            </div>
+
+            <div class="teams-container">
+                <!-- Team Attackers -->
+                <div class="team-column attackers">
+                    <div class="team-header">ATTACKERS <span>AVG MMR: <span id="attackers-avg">2140</span></span></div>
+                    <div id="attackers-list" class="team-list"></div>
+                </div>
+
+                <div class="vs-divider">VS</div>
+
+                <!-- Team Defenders -->
+                <div class="team-column defenders">
+                    <div class="team-header">DEFENDERS <span>AVG MMR: <span id="defenders-avg">2145</span></span></div>
+                    <div id="defenders-list" class="team-list"></div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button id="btn-close-modal" class="btn-primary">CONTINUE</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js?v=4"></script>
+</body>
+</html>
