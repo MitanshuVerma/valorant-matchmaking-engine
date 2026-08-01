@@ -280,10 +280,10 @@ function createPlayerItem(p) {
         <div class="player-stats">
             <div class="stat-box">
                 <span class="stat-label">RANK / MMR</span>
-                <span class="rank-text">${p.rank || 'Immortal'} (${Math.round(p.mmr)})</span>
+                <span class="rank-text">${p.rank || 'Immortal'}${p.player_id === currentPlayerId ? ` (${Math.round(p.mmr)} MMR)` : ''}</span>
             </div>
             <div class="stat-box">
-                <span class="stat-label">ACS / KDA</span>
+                <span class="stat-label">ACS / KD</span>
                 <span>${p.acs || 240} | ${p.kda || 1.4}</span>
             </div>
         </div>
@@ -323,7 +323,7 @@ function renderTeamList(container, team) {
                 </div>
             </div>
             <div class="player-stats">
-                <span class="rank-text">${Math.round(p.mmr)} MMR</span>
+                <span class="rank-text">${p.player_id === currentPlayerId ? `${p.rank || 'Immortal'} (${Math.round(p.mmr)} MMR)` : p.rank || 'Immortal'}</span>
             </div>
         `;
         container.appendChild(div);

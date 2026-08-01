@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     
     riot_api_key: str = ""
     trn_api_key: str = ""
+    henrik_api_key: str = ""
     
     lobby_size: int = 10
     max_mmr_gap: float = 150.0

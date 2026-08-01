@@ -5,7 +5,7 @@ from app.db.redis import zadd_player, zrem_player, get_queue_range
 from app.core.queue import QUEUE_NAME
 from app.services.ai_generator import ai_generator
 from app.services.riot_api import riot_client
-from app.services.tracker_api import tracker_client
+from app.services.henrik_api import henrik_client
 from app.db.postgres import AsyncSessionLocal
 from app.db.models import PlayerStat
 from sqlalchemy.future import select
@@ -47,70 +47,74 @@ def get_rank_for_mmr(mmr: float) -> str:
     final_index = max(0, min(len(ranks) - 1, base_index + variance))
     return ranks[final_index]
 
-async def delayed_ai_population(user_payload: dict, user_mmr: float):
-    """Background task: Pulls 9 closest players from Postgres pool, fetches TRN stats, adds to Redis."""
-    logger.info(f"Queued player {user_payload['player_id']}. Querying Postgres for 9 closest players...")
+async def delayed_match_population(user_payload: dict, user_mmr: float, latest_match_id: str):
+    """Background task: Pulls 9 players from the user's latest real match, falls back to Postgres if needed."""
+    logger.info(f"Queued player {user_payload['player_id']}. Fetching real players from match {latest_match_id}...")
     
     selected_players = []
     
-    # 1. Query Postgres for the 9 closest MMR players
-    async with AsyncSessionLocal() as db:
-        # Avoid pulling the user themselves
-        stmt = (
-            select(PlayerStat)
-            .where(PlayerStat.player_id != user_payload["player_id"])
-            .order_by(func.abs(PlayerStat.current_mmr - user_mmr))
-            .limit(9)
+    # 1. Try to fetch 9 real players from the recent match
+    if latest_match_id:
+        real_players = await henrik_client.get_match_players(
+            latest_match_id, 
+            user_payload["game_name"], 
+            user_payload["tag_line"]
         )
-        result = await db.execute(stmt)
-        db_players = result.scalars().all()
-        
-    if len(db_players) < 9:
-        logger.warning(f"Only found {len(db_players)} players in DB. Filling rest with AI generator.")
-        
-    for p in db_players:
-        parts = p.player_id.split("#")
-        game_name = parts[0]
-        tag_line = parts[1] if len(parts) > 1 else "NA1"
-        
-        # 2. Fetch TRN stats
-        logger.info(f"Fetching TRN stats for {p.player_id}...")
-        trn_stats = await tracker_client.get_player_stats(game_name, tag_line)
-        
-        if trn_stats:
-            kda = trn_stats["kda"]
-            acs = trn_stats["acs"]
-            rank = trn_stats["rank"]
-            stats_source = "Tracker.gg (Live)"
-        else:
-            # Fallback if profile is private or TRN 404s
-            kda = round(random.uniform(0.8, 1.4) + (p.current_mmr / 5000), 2)
-            acs = random.randint(150, 240) + int(p.current_mmr / 100)
-            rank = get_rank_for_mmr(p.current_mmr)
-            stats_source = "TRN Fallback"
+        for rp in real_players:
+            player_payload = {
+                "player_id": f"{rp['game_name']}#{rp['tag_line']}",
+                "game_name": rp['game_name'],
+                "tag_line": rp['tag_line'],
+                "agent": rp['agent'],
+                "role": random.choice(["Duelist", "Initiator", "Controller", "Sentinel"]), # Simplified role
+                "rank": rp['rank'],
+                "mmr": user_mmr, # Keep MMR same as user to ensure match pops instantly
+                "kda": rp['kda'],
+                "acs": rp['acs'],
+                "headshot_pct": f"{random.randint(15, 45)}%",
+                "max_ping": random.randint(15, 65),
+                "queue_join_timestamp": time.time(),
+                "stats_source": "HenrikDev (Match History)",
+                "is_ai": False
+            }
+            selected_players.append(player_payload)
             
-        player_payload = {
-            "player_id": p.player_id,
-            "game_name": game_name,
-            "tag_line": tag_line,
-            "agent": random.choice(["Jett", "Reyna", "Omen", "Sova", "Killjoy", "Cypher"]),
-            "role": random.choice(["Duelist", "Initiator", "Controller", "Sentinel"]),
-            "rank": rank,
-            "mmr": p.current_mmr,
-            "kda": kda,
-            "acs": acs,
-            "headshot_pct": f"{random.randint(15, 45)}%",
-            "max_ping": random.randint(15, 65),
-            "queue_join_timestamp": time.time(),
-            "stats_source": stats_source,
-            "is_ai": False
-        }
-        
-        selected_players.append(player_payload)
-        # Sleep for 1.2s to respect TRN rate limits
-        await asyncio.sleep(1.2)
-        
-    # If we didn't find 9 in DB, fill with AI
+    # 2. If we didn't get enough (e.g. no match ID), fall back to DB
+    if len(selected_players) < 9:
+        logger.warning(f"Only found {len(selected_players)} players in match. Filling rest from DB.")
+        async with AsyncSessionLocal() as db:
+            stmt = (
+                select(PlayerStat)
+                .where(PlayerStat.player_id != user_payload["player_id"])
+                .order_by(func.abs(PlayerStat.current_mmr - user_mmr))
+                .limit(9 - len(selected_players))
+            )
+            result = await db.execute(stmt)
+            db_players = result.scalars().all()
+            
+        for p in db_players:
+            parts = p.player_id.split("#")
+            game_name = parts[0]
+            tag_line = parts[1] if len(parts) > 1 else "NA1"
+            player_payload = {
+                "player_id": p.player_id,
+                "game_name": game_name,
+                "tag_line": tag_line,
+                "agent": random.choice(["Jett", "Reyna", "Omen", "Sova", "Killjoy", "Cypher"]),
+                "role": random.choice(["Duelist", "Initiator", "Controller", "Sentinel"]),
+                "rank": get_rank_for_mmr(p.current_mmr),
+                "mmr": p.current_mmr,
+                "kda": round(random.uniform(0.8, 1.4) + (p.current_mmr / 5000), 2),
+                "acs": random.randint(150, 240) + int(p.current_mmr / 100),
+                "headshot_pct": f"{random.randint(15, 45)}%",
+                "max_ping": random.randint(15, 65),
+                "queue_join_timestamp": time.time(),
+                "stats_source": "Fallback DB",
+                "is_ai": False
+            }
+            selected_players.append(player_payload)
+            
+    # If still not 9, fill with AI just to avoid breaking the matchmaker completely
     if len(selected_players) < 9:
         ai_players = ai_generator.generate_players(count=9 - len(selected_players), base_mmr=user_mmr)
         selected_players.extend(ai_players)
@@ -119,7 +123,7 @@ async def delayed_ai_population(user_payload: dict, user_mmr: float):
     for sp in selected_players:
         await zadd_player(QUEUE_NAME, sp["mmr"], sp)
         
-    logger.info(f"Added 9 players to Redis ZSET. Background worker will now form 5v5 match.")
+    logger.info(f"Added {len(selected_players)} players to Redis ZSET. Background worker will now form 5v5 match.")
 
 @router.post("/join", response_model=QueueResponse, status_code=status.HTTP_201_CREATED)
 async def join_queue(request: QueueJoinRequest):
@@ -166,20 +170,22 @@ async def auto_match_simulation(request: AutoMatchRequest, background_tasks: Bac
                     raise HTTPException(status_code=404, detail=f"Invalid Riot ID! {user_player_id} does not exist on Riot Servers.")
                 logger.warning(f"Could not validate via Riot API ({riot_err}).")
 
-        # 2. Fetch User Stats (Tracker API)
+        # 2. Fetch User Stats (Henrik API)
         real_kda = round(random.uniform(1.0, 1.8) + (request.user_mmr / 5000), 2)
         real_acs = random.randint(190, 270) + int(request.user_mmr / 100)
         rank_str = get_rank_for_mmr(request.user_mmr)
         stats_source = "simulated"
+        latest_match_id = None
 
-        if settings.trn_api_key:
-            logger.info(f"Fetching live TRN stats for {user_player_id}...")
-            trn_stats = await tracker_client.get_player_stats(request.game_name, request.tag_line)
-            if trn_stats:
-                real_kda = trn_stats["kda"]
-                real_acs = trn_stats["acs"]
-                rank_str = trn_stats["rank"]
-                stats_source = "Tracker.gg (Live)"
+        if settings.henrik_api_key:
+            logger.info(f"Fetching live stats from HenrikDev API for {user_player_id}...")
+            henrik_stats = await henrik_client.get_player_stats(request.game_name, request.tag_line)
+            if henrik_stats:
+                real_kda = henrik_stats["kda"]
+                real_acs = henrik_stats["acs"]
+                rank_str = henrik_stats["rank"]
+                latest_match_id = henrik_stats.get("latest_match_id")
+                stats_source = "HenrikDev (Live)"
 
         # 3. Add to Postgres Player Pool (Self-Growing DB)
         async with AsyncSessionLocal() as db:
@@ -218,8 +224,8 @@ async def auto_match_simulation(request: AutoMatchRequest, background_tasks: Bac
         # Enqueue user immediately
         await zadd_player(QUEUE_NAME, request.user_mmr, user_payload)
 
-        # Schedule background delayed population (queries DB for 9 real players)
-        background_tasks.add_task(delayed_ai_population, user_payload, request.user_mmr)
+        # Schedule background delayed population (queries Henrik for 9 match players)
+        background_tasks.add_task(delayed_match_population, user_payload, request.user_mmr, latest_match_id)
 
         return {
             "status": "success",
