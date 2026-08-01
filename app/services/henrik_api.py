@@ -24,7 +24,7 @@ class HenrikAPIClient:
                 acc_res = await client.get(account_url, headers=self.headers, timeout=10.0)
                 if acc_res.status_code == 404:
                     logger.warning(f"Account {game_name}#{tag_line} not found (404).")
-                    return None
+                    raise HTTPException(status_code=404, detail=f"Invalid Riot ID! {game_name}#{tag_line} does not exist on Riot Servers.")
                 if acc_res.status_code in [401, 403]:
                     raise HTTPException(status_code=500, detail="Henrik API Key is invalid or unauthorized!")
                 acc_res.raise_for_status()
