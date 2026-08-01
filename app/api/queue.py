@@ -28,6 +28,25 @@ class AutoMatchRequest(BaseModel):
     agent: str = "Jett"
     user_mmr: float = 2150.0
 
+def get_rank_for_mmr(mmr: float) -> str:
+    ranks = [
+        "Iron 1", "Iron 2", "Iron 3",
+        "Bronze 1", "Bronze 2", "Bronze 3",
+        "Silver 1", "Silver 2", "Silver 3",
+        "Gold 1", "Gold 2", "Gold 3",
+        "Platinum 1", "Platinum 2", "Platinum 3",
+        "Diamond 1", "Diamond 2", "Diamond 3",
+        "Ascendant 1", "Ascendant 2", "Ascendant 3",
+        "Immortal 1", "Immortal 2", "Immortal 3",
+        "Radiant"
+    ]
+    # Base index calculation based on max MMR 3000
+    base_index = int((mmr / 3000.0) * len(ranks))
+    # Add random variance of -2 to +2 ranks
+    variance = random.randint(-2, 2)
+    final_index = max(0, min(len(ranks) - 1, base_index + variance))
+    return ranks[final_index]
+
 async def delayed_ai_population(user_payload: dict, user_mmr: float):
     """Background task: Pulls 9 closest players from Postgres pool, fetches TRN stats, adds to Redis."""
     logger.info(f"Queued player {user_payload['player_id']}. Querying Postgres for 9 closest players...")
@@ -67,7 +86,7 @@ async def delayed_ai_population(user_payload: dict, user_mmr: float):
             # Fallback if profile is private or TRN 404s
             kda = round(random.uniform(0.8, 1.4) + (p.current_mmr / 5000), 2)
             acs = random.randint(150, 240) + int(p.current_mmr / 100)
-            rank = "Immortal 1" if p.current_mmr > 2000 else ("Iron 1" if p.current_mmr < 500 else "Gold 2")
+            rank = get_rank_for_mmr(p.current_mmr)
             stats_source = "TRN Fallback"
             
         player_payload = {
@@ -150,7 +169,7 @@ async def auto_match_simulation(request: AutoMatchRequest, background_tasks: Bac
         # 2. Fetch User Stats (Tracker API)
         real_kda = round(random.uniform(1.0, 1.8) + (request.user_mmr / 5000), 2)
         real_acs = random.randint(190, 270) + int(request.user_mmr / 100)
-        rank_str = "Immortal 1" if request.user_mmr > 2000 else ("Iron 1" if request.user_mmr < 500 else "Gold 2")
+        rank_str = get_rank_for_mmr(request.user_mmr)
         stats_source = "simulated"
 
         if settings.trn_api_key:

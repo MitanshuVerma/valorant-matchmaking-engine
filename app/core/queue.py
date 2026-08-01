@@ -14,6 +14,25 @@ logger = logging.getLogger(__name__)
 QUEUE_NAME = "matchmaking_queue"
 VALORANT_MAPS = ["Haven", "Bind", "Ascent", "Split", "Icebox", "Lotus", "Sunset"]
 
+import random
+
+AVAILABLE_AGENTS = [
+    "Jett", "Reyna", "Omen", "Sova", "Killjoy", "Cypher", "Viper", "Fade", 
+    "Breach", "Phoenix", "Raze", "Brimstone", "Sage", "Skye", "Yoru", 
+    "Astra", "KAYO", "Chamber", "Neon", "Harbor", "Gekko", "Deadlock", "Iso", "Clove"
+]
+
+def assign_unique_agents(team_players):
+    used_agents = set()
+    for p in team_players:
+        if p["agent"] not in used_agents:
+            used_agents.add(p["agent"])
+        else:
+            available = list(set(AVAILABLE_AGENTS) - used_agents)
+            new_agent = random.choice(available)
+            p["agent"] = new_agent
+            used_agents.add(new_agent)
+
 async def persist_match(players: list[dict]):
     """Persists a formed match to PostgreSQL / SQLite and notifies players via WebSocket."""
     lobby_id = str(uuid.uuid4())
@@ -24,6 +43,10 @@ async def persist_match(players: list[dict]):
     sorted_players = sorted(players, key=lambda x: x["mmr"], reverse=True)
     attackers = sorted_players[::2]  # Alternate picking for balanced teams
     defenders = sorted_players[1::2]
+    
+    # Enforce unique agents per team
+    assign_unique_agents(attackers)
+    assign_unique_agents(defenders)
 
     match_payload = {
         "lobby_id": lobby_id,
