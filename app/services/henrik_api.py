@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 class HenrikAPIClient:
     def __init__(self):
         self.base_url = "https://api.henrikdev.xyz/valorant"
-        self.api_key = getattr(settings, "henrik_api_key", "")
+        self.api_key = getattr(settings, "henrik_api_key", "").strip()
         self.headers = {
             "Authorization": self.api_key
         }
