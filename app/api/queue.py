@@ -211,7 +211,8 @@ async def auto_match_simulation(request: AutoMatchRequest, background_tasks: Bac
             "max_ping": 18,
             "queue_join_timestamp": time.time(),
             "stats_source": stats_source,
-            "is_ai": False
+            "is_ai": False,
+            "is_real_user": True
         }
         
         # Enqueue user immediately

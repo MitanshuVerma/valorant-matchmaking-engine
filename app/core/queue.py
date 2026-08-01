@@ -19,12 +19,22 @@ import random
 AVAILABLE_AGENTS = [
     "Jett", "Reyna", "Omen", "Sova", "Killjoy", "Cypher", "Viper", "Fade", 
     "Breach", "Phoenix", "Raze", "Brimstone", "Sage", "Skye", "Yoru", 
-    "Astra", "KAYO", "Chamber", "Neon", "Harbor", "Gekko", "Deadlock", "Iso", "Clove"
+    "Astra", "KAY/O", "Chamber", "Neon", "Harbor", "Gekko", "Deadlock", "Iso", "Clove"
 ]
 
 def assign_unique_agents(team_players):
     used_agents = set()
+    
+    # Pass 1: Lock in the real user's agent first so they never get reassigned
     for p in team_players:
+        if p.get("is_real_user"):
+            used_agents.add(p["agent"])
+            
+    # Pass 2: Assign everyone else
+    for p in team_players:
+        if p.get("is_real_user"):
+            continue
+            
         if p["agent"] not in used_agents:
             used_agents.add(p["agent"])
         else:
