@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     postgres_url: str = "postgresql+asyncpg://riot:riotpass@localhost:5432/matchmaking"
     
     riot_api_key: str = ""
+    trn_api_key: str = ""
     
     lobby_size: int = 10
     max_mmr_gap: float = 150.0

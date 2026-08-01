@@ -6,7 +6,8 @@ import os
 from contextlib import asynccontextmanager
 
 from app.db.redis import redis_wrapper
-from app.db.postgres import engine, Base
+from app.db.postgres import engine, Base, AsyncSessionLocal
+from app.db.seed_pool import seed_player_pool
 from app.api import queue, player, ws
 from app.core.queue import matchmaking_worker
 
@@ -15,6 +16,10 @@ async def lifespan(app: FastAPI):
     # Startup: Create tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+    # Seed Database with Player Pool
+    async with AsyncSessionLocal() as db:
+        await seed_player_pool(db)
         
     # Start the matchmaking background worker
     worker_task = asyncio.create_task(matchmaking_worker())
