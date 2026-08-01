@@ -22,7 +22,8 @@ class TrackerAPIClient:
                 # Add a 10-second timeout
                 response = await client.get(url, headers=self.headers, timeout=10.0)
                 if response.status_code == 404:
-                    return None # Player not found or profile is private
+                    from fastapi import HTTPException
+                    raise HTTPException(status_code=404, detail=f"Player {game_name}#{tag_line} does not exist on Tracker.gg!")
                 response.raise_for_status()
                 data = response.json()
                 
@@ -53,6 +54,9 @@ class TrackerAPIClient:
             logger.error(f"TRN API Error for {game_name}#{tag_line}: {e}")
             return None
         except Exception as e:
+            from fastapi import HTTPException
+            if isinstance(e, HTTPException):
+                raise
             logger.error(f"Unexpected TRN API Error: {e}")
             return None
 
