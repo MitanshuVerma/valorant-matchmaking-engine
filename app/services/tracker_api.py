@@ -32,12 +32,16 @@ class TrackerAPIClient:
                 if not segments:
                     return None
                     
-                # Look for the overview segment
-                overview = next((s for s in segments if s.get("type") == "overview"), None)
-                if not overview:
+                # Look for any segment that contains stats with kdaRatio
+                stats = {}
+                for s in segments:
+                    if "stats" in s and "kdaRatio" in s["stats"]:
+                        stats = s["stats"]
+                        break
+                        
+                if not stats:
+                    logger.warning(f"No kdaRatio found in TRN segments for {game_name}#{tag_line}")
                     return None
-                    
-                stats = overview.get("stats", {})
                 
                 # Extract specific stats
                 kda = stats.get("kdaRatio", {}).get("value", 0.0)
@@ -50,7 +54,10 @@ class TrackerAPIClient:
                     "acs": round(acs, 1),
                     "rank": rank_str
                 }
-        except httpx.HTTPError as e:
+        except httpx.HTTPStatusError as e:
+            from fastapi import HTTPException
+            if e.response.status_code in [401, 403]:
+                raise HTTPException(status_code=500, detail="Tracker.gg API Key is invalid or unauthorized for Valorant (403 Forbidden)!")
             logger.error(f"TRN API Error for {game_name}#{tag_line}: {e}")
             return None
         except Exception as e:
